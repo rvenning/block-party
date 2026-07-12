@@ -196,7 +196,7 @@ const Game = {
     this.ctx = this.cv.getContext("2d");
     // iOS settles its viewport late (toolbars, rotation, standalone launch) —
     // listen wide and re-measure again shortly after each change.
-    const remeasure = () => { this.resize(); setTimeout(() => this.resize(), 350); };
+    const remeasure = () => { this.unzoom(); this.resize(); setTimeout(() => this.resize(), 350); };
     window.addEventListener("resize", remeasure);
     window.addEventListener("orientationchange", remeasure);
     if (window.visualViewport) window.visualViewport.addEventListener("resize", remeasure);
@@ -204,7 +204,7 @@ const Game = {
     // leave the game stuck zoomed-in.
     document.addEventListener("gesturestart", (e) => e.preventDefault());
     document.addEventListener("gesturechange", (e) => e.preventDefault());
-    this.resize();
+    remeasure(); // also snaps back a zoom left over from a previous visit
     const pos = (e) => {
       const r = this.cv.getBoundingClientRect();
       return { x: e.clientX - r.left, y: e.clientY - r.top };
@@ -220,6 +220,21 @@ const Game = {
     this.cv.addEventListener("pointerup", () => this.onUp());
     this.cv.addEventListener("pointercancel", () => this.onUp());
     requestAnimationFrame((ts) => this.frame(ts));
+  },
+
+  // Safari keeps a pinch zoom forever (and ignores maximum-scale for
+  // pinches). Rewriting the viewport meta forces it to re-clamp the scale,
+  // snapping an accidentally zoomed page back to 1:1.
+  _unzooming: false,
+  unzoom() {
+    const vv = window.visualViewport;
+    if (!vv || vv.scale <= 1.02 || this._unzooming) return;
+    const meta = document.querySelector('meta[name="viewport"]');
+    if (!meta) return;
+    this._unzooming = true;
+    const orig = meta.getAttribute("content");
+    meta.setAttribute("content", orig + ", minimum-scale=1");
+    setTimeout(() => { meta.setAttribute("content", orig); this._unzooming = false; }, 150);
   },
 
   resize() {
@@ -609,7 +624,7 @@ refreshSplash();
 GK.UI.onScreenChange = (n) => {
   Game.active = n === "game";
   if (n === "splash") refreshSplash();
-  if (n === "game") { Game.resize(); setTimeout(() => Game.resize(), 350); }
+  if (n === "game") { Game.unzoom(); Game.resize(); setTimeout(() => Game.resize(), 350); }
 };
 
 // Firestore sync runs in the background; the game is playable immediately.
