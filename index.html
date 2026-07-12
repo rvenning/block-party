@@ -59,6 +59,7 @@
     <button class="btn blue wide" onclick="App.showLeaderboard()">🏆 High Scores</button>
     <button class="btn grey wide" id="btn-install" style="display:none">📲 Add to Home Screen</button>
     <p style="opacity:.6;font-size:13px;margin-top:14px"><span id="sync-badge">📴 local only</span></p>
+    <p style="opacity:.4;font-size:11px;margin-top:4px" id="ver-line"></p>
   </div>
 </div>
 
@@ -184,6 +185,7 @@ SHAPES.forEach(s => {
 const CHEERS = ["Great job! 🌟", "Amazing! ✨", "Super! 🎈", "Wow! 🌈", "Fantastic! 🦄", "Yay! 🎉"];
 
 /* ===================== game ===================== */
+const VERSION = 4;
 const GRID = 8;
 const Game = {
   cv: null, ctx: null, active: false,
@@ -196,15 +198,19 @@ const Game = {
     this.ctx = this.cv.getContext("2d");
     // iOS settles its viewport late (toolbars, rotation, standalone launch) —
     // listen wide and re-measure again shortly after each change.
-    const remeasure = () => { this.unzoom(); this.resize(); setTimeout(() => this.resize(), 350); };
+    const remeasure = () => { this.unzoom(); this.resize(); this.verLine(); setTimeout(() => { this.resize(); this.verLine(); }, 350); };
     window.addEventListener("resize", remeasure);
     window.addEventListener("orientationchange", remeasure);
-    if (window.visualViewport) window.visualViewport.addEventListener("resize", remeasure);
+    if (window.visualViewport) {
+      window.visualViewport.addEventListener("resize", remeasure);
+      // panning while zoomed moves the visible rect — follow it
+      window.visualViewport.addEventListener("scroll", () => this.resize());
+    }
     // iOS ignores user-scalable=no; block pinch zoom so little hands can't
     // leave the game stuck zoomed-in.
     document.addEventListener("gesturestart", (e) => e.preventDefault());
     document.addEventListener("gesturechange", (e) => e.preventDefault());
-    remeasure(); // also snaps back a zoom left over from a previous visit
+    remeasure(); // also picks up a zoom left over from a previous visit
     const pos = (e) => {
       const r = this.cv.getBoundingClientRect();
       return { x: e.clientX - r.left, y: e.clientY - r.top };
@@ -222,9 +228,18 @@ const Game = {
     requestAnimationFrame((ts) => this.frame(ts));
   },
 
-  // Safari keeps a pinch zoom forever (and ignores maximum-scale for
-  // pinches). Rewriting the viewport meta forces it to re-clamp the scale,
-  // snapping an accidentally zoomed page back to 1:1.
+  // Diagnostics on the splash: version, viewport, zoom level.
+  verLine() {
+    const el = document.getElementById("ver-line");
+    if (!el) return;
+    const vv = window.visualViewport;
+    el.textContent = `v${VERSION} · ${window.innerWidth}×${window.innerHeight}` +
+      (vv ? ` · zoom ${vv.scale.toFixed(2)}` : "");
+  },
+
+  // Best-effort zoom reset: rewriting the viewport meta. Modern iOS ignores
+  // this after a user pinch (resize() adapts to the zoom instead), but it
+  // still helps on some versions and costs nothing.
   _unzooming: false,
   unzoom() {
     const vv = window.visualViewport;
@@ -246,13 +261,24 @@ const Game = {
     const dpr = window.devicePixelRatio || 1;
     this.cv.width = this.W * dpr; this.cv.height = this.H * dpr;
     this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    // Where can the player actually SEE? Normally the whole stage — but iOS
+    // keeps a user's pinch zoom forever and won't let JS reset it, so when
+    // the page is stuck zoomed, lay the board out inside the visible rect.
+    let ox = 0, oy = 0, w = this.W, h = this.H;
+    const vv = window.visualViewport;
+    if (vv && vv.scale > 1.02) {
+      const L = Math.max(box.left, vv.offsetLeft), T = Math.max(box.top, vv.offsetTop);
+      const R = Math.min(box.left + box.width, vv.offsetLeft + vv.width);
+      const B = Math.min(box.top + box.height, vv.offsetTop + vv.height);
+      if (R - L > 120 && B - T > 200) { ox = L - box.left; oy = T - box.top; w = R - L; h = B - T; }
+    }
     // keep the tray clear of the iOS home indicator
     const safeB = parseFloat(getComputedStyle(stage).getPropertyValue("--safe-b")) || 0;
-    const usableH = this.H - safeB;
+    const usableH = h - safeB;
     // grid on top, tray (~2.4 cells) below, plus a little breathing room
-    this.cell = Math.min((this.W - 20) / GRID, (usableH - 24) / (GRID + 3.2));
-    this.X0 = (this.W - this.cell * GRID) / 2;
-    this.Y0 = Math.max(8, (usableH - this.cell * (GRID + 3.2)) / 2);
+    this.cell = Math.min((w - 20) / GRID, (usableH - 24) / (GRID + 3.2));
+    this.X0 = ox + (w - this.cell * GRID) / 2;
+    this.Y0 = oy + Math.max(8, (usableH - this.cell * (GRID + 3.2)) / 2);
     this.trayY = this.Y0 + this.cell * (GRID + 0.55);
   },
 
