@@ -10,7 +10,7 @@ room. Modelled on the "Block Puzzle" app, tuned to challenge a capable player
 
 ## Features
 - 🧩 Classic block puzzle: drag pieces onto an 8×8 grid, clear full rows and columns
-- 🧱 A meaty piece mix — pentominoes, the 3×3 square, long bars and awkward L/T/S shapes — that fills the board fast and makes you plan ahead
+- 🧱 A meaty piece mix — pentominoes, long bars and awkward L/T/S shapes — that fills the board fast and makes you plan ahead
 - 🔥 **Combo streak:** clear a line on consecutive placements and each one is worth more (×1.5, ×2, ×2.5…)
 - 💥 Steeper multi-line bonuses, plus a confetti **Super Clear** for emptying the whole board
 - 🪙 Coins for every line cleared; ⭐ your best score is remembered
