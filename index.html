@@ -62,7 +62,6 @@
     <button class="btn blue wide" onclick="App.showLeaderboard()">🏆 High Scores</button>
     <button class="btn grey wide" id="btn-install" style="display:none">📲 Add to Home Screen</button>
     <p style="opacity:.6;font-size:13px;margin-top:14px"><span id="sync-badge">📴 local only</span></p>
-    <p style="opacity:.4;font-size:11px;margin-top:4px" id="ver-line"></p>
   </div>
 </div>
 
@@ -188,7 +187,6 @@ SHAPES.forEach(s => {
 const CHEERS = ["Great job! 🌟", "Amazing! ✨", "Super! 🎈", "Wow! 🌈", "Fantastic! 🦄", "Yay! 🎉"];
 
 /* ===================== game ===================== */
-const VERSION = 5;
 const GRID = 8;
 const Game = {
   cv: null, ctx: null, active: false,
@@ -201,7 +199,7 @@ const Game = {
     this.ctx = this.cv.getContext("2d");
     // iOS settles its viewport late (toolbars, rotation, standalone launch) —
     // listen wide and re-measure again shortly after each change.
-    const remeasure = () => { this.unzoom(); this.resize(); this.verLine(); setTimeout(() => { this.resize(); this.verLine(); }, 350); };
+    const remeasure = () => { this.unzoom(); this.resize(); setTimeout(() => this.resize(), 350); };
     window.addEventListener("resize", remeasure);
     window.addEventListener("orientationchange", remeasure);
     if (window.visualViewport) {
@@ -229,15 +227,6 @@ const Game = {
     this.cv.addEventListener("pointerup", () => this.onUp());
     this.cv.addEventListener("pointercancel", () => this.onUp());
     requestAnimationFrame((ts) => this.frame(ts));
-  },
-
-  // Diagnostics on the splash: version, viewport, zoom level.
-  verLine() {
-    const el = document.getElementById("ver-line");
-    if (!el) return;
-    const vv = window.visualViewport;
-    el.textContent = `v${VERSION} · ${window.innerWidth}×${window.innerHeight}` +
-      (vv ? ` · zoom ${vv.scale.toFixed(2)}` : "");
   },
 
   // Best-effort zoom reset: rewriting the viewport meta. Modern iOS ignores
