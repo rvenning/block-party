@@ -1,0 +1,610 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<meta name="theme-color" content="#3b2a6d" />
+<link rel="manifest" href="manifest.json" />
+<link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png" />
+<link rel="apple-touch-icon" href="icons/icon-192.png" />
+<title>Block Party</title>
+
+<link rel="stylesheet" href="lib/gk-base.css" />
+
+<style>
+  :root { --gk-accent:#ffb13b; --gk-accent-sh:#c77e1a; }
+  html, body { margin:0; height:100%; overflow:hidden; color:#fff;
+    font-family:-apple-system, system-ui, "Segoe UI", Roboto, sans-serif;
+    user-select:none; -webkit-user-select:none; touch-action:none;
+    background:#3b2a6d; }
+  .screen.opaque { background: radial-gradient(130% 90% at 50% -10%, #7a5fd0 0%, #543ba0 45%, #3b2a6d 100%); }
+
+  /* splash decoration: floating blocks */
+  .float-blocks { font-size:44px; letter-spacing:14px; margin:6px 0 2px; }
+  .float-blocks span { display:inline-block; animation: bob 2.6s ease-in-out infinite; }
+  .float-blocks span:nth-child(2) { animation-delay:.4s; }
+  .float-blocks span:nth-child(3) { animation-delay:.8s; }
+  .float-blocks span:nth-child(4) { animation-delay:1.2s; }
+  @keyframes bob { 0%,100%{ transform:translateY(0) } 50%{ transform:translateY(-10px) } }
+
+  /* game screen */
+  #screen-game { padding:0; }
+  #screen-game .topbar { padding-top:calc(10px + env(safe-area-inset-top)); }
+  .hud-score { flex:1; text-align:center; font-weight:900; font-size:30px;
+    text-shadow:0 3px 0 rgba(0,0,0,.25); }
+  .hud-best { font-size:14px; font-weight:800; opacity:.8; display:block; margin-top:-4px; }
+  #stage { flex:1; width:100%; position:relative; }
+  #cv { position:absolute; inset:0; display:block; }
+
+  /* game-over sheet */
+  .over-big { font-size:56px; margin:4px 0; }
+  .over-score { font-size:44px; font-weight:900; color:#543ba0; margin:0; }
+  .over-msg { font-size:20px; font-weight:800; margin:2px 0 12px; color:#8a76c9; }
+</style>
+</head>
+<body>
+
+<!-- ============ SPLASH ============ -->
+<div class="screen opaque active" id="screen-splash">
+  <h1 class="title">🎉 Block Party</h1>
+  <div class="float-blocks"><span>🟥</span><span>🟨</span><span>🟩</span><span>🟦</span></div>
+  <p class="subtitle">Fill a line to make it sparkle!</p>
+  <div class="content" style="text-align:center">
+    <button class="btn green wide" id="btn-continue-as" style="display:none"></button>
+    <button class="btn green wide" id="btn-play" onclick="App.play()">▶ Play</button>
+    <button class="btn blue wide" onclick="App.showLeaderboard()">🏆 High Scores</button>
+    <button class="btn grey wide" id="btn-install" style="display:none">📲 Add to Home Screen</button>
+    <p style="opacity:.6;font-size:13px;margin-top:14px"><span id="sync-badge">📴 local only</span></p>
+  </div>
+</div>
+
+<!-- ============ PROFILES ============ -->
+<div class="screen opaque" id="screen-profiles">
+  <div class="topbar">
+    <button class="iconbtn" onclick="GK.UI.showScreen('splash')">⬅</button>
+    <div class="grow"></div>
+    <button class="iconbtn btn-sound">🔊</button>
+  </div>
+  <h1 class="title" style="font-size:32px">Who's playing?</h1>
+  <div class="content"><div class="profile-list" id="profile-list"></div></div>
+</div>
+
+<!-- ============ GAME ============ -->
+<div class="screen opaque" id="screen-game">
+  <div class="topbar">
+    <button class="iconbtn" onclick="App.goHome()">⬅</button>
+    <div class="hud-score"><span id="hud-score">0</span>
+      <span class="hud-best" id="hud-best"></span></div>
+    <button class="iconbtn btn-sound">🔊</button>
+  </div>
+  <div id="stage"><canvas id="cv"></canvas></div>
+</div>
+
+<!-- ============ LEADERBOARD ============ -->
+<div class="screen opaque" id="screen-leaderboard">
+  <div class="topbar">
+    <button class="iconbtn" id="lb-back">⬅</button>
+    <div class="grow"></div>
+    <button class="iconbtn btn-sound">🔊</button>
+  </div>
+  <h1 class="title" style="font-size:32px">🏆 High Scores</h1>
+  <div class="content" id="lb-rows"></div>
+</div>
+
+<!-- ============ BOARD-FULL CELEBRATION ============ -->
+<div class="modal" id="modal-over">
+  <div class="sheet">
+    <div class="over-big" id="over-emoji">🎉</div>
+    <h2 id="over-title">Wonderful!</h2>
+    <p class="over-score" id="over-score">0</p>
+    <p class="over-msg" id="over-msg"></p>
+    <button class="btn green wide" onclick="App.playAgain()">▶ Play Again</button>
+    <div style="height:8px"></div>
+    <button class="btn grey wide" onclick="App.goHome(true)">🏠 Home</button>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script src="lib/gk-util.js"></script>
+<script src="lib/gk-audio.js"></script>
+<script src="lib/gk-ui.js"></script>
+<script src="lib/gk-storage.js"></script>
+<script src="lib/gk-profiles.js"></script>
+<script src="lib/gk-pwa.js"></script>
+
+<script>
+"use strict";
+
+/* ===================== storage ===================== */
+const Storage = GK.createStorage({
+  prefix: "bp",
+  collection: "blockparty",
+  firebaseConfig: {
+    apiKey: "AIzaSyD1h2aN_9spXt8usZ_ycpGFnIIGztESXWk",
+    authDomain: "wordvoyage-e5a5c.firebaseapp.com",
+    projectId: "wordvoyage-e5a5c",
+    storageBucket: "wordvoyage-e5a5c.firebasestorage.app",
+    messagingSenderId: "569011992319",
+    appId: "1:569011992319:web:bdcd6019d112006b5cbeca"
+  },
+  blankProgress: () => ({ best: 0, coins: 0, lines: 0, games: 0, updated: 0 }),
+  mergeProgress: (a, b) => ({
+    best:  Math.max(a.best  || 0, b.best  || 0),
+    coins: Math.max(a.coins || 0, b.coins || 0),
+    lines: Math.max(a.lines || 0, b.lines || 0),
+    games: Math.max(a.games || 0, b.games || 0),
+  }),
+});
+
+/* ===================== sounds ===================== */
+Object.assign(GK.Sfx, {
+  pickup() { this.tone({ freq: 500, type: "sine", dur: 0.06, vol: 0.12, slide: 120 }); },
+  place()  { this.tone({ freq: 220, type: "sine", dur: 0.08, vol: 0.2 });
+             this.tone({ freq: 440, type: "sine", dur: 0.05, vol: 0.1 }); },
+  nope()   { this.tone({ freq: 260, type: "sine", dur: 0.1, vol: 0.1, slide: -80 }); },
+  // rising chime — one note per cleared line, pitched up each time
+  line(n)  {
+    const base = [660, 784, 988, 1175];
+    for (let i = 0; i <= Math.min(n, 3); i++)
+      this.tone({ freq: base[i], type: "triangle", dur: 0.22, vol: 0.2, when: i * 0.09 });
+    this.noise({ dur: 0.15, vol: 0.06 });
+  },
+  superclear() { this.win(); },
+});
+
+/* ===================== pieces ===================== */
+const PAL = { y:"#ffd93b", p:"#ff5c8a", o:"#ffa03b", g:"#43c65a",
+              b:"#3bb4ff", v:"#9b6bff", t:"#2ed9c3" };
+// Kid-tuned set: mostly small pieces, weighted so the tray is rarely scary.
+const SHAPES = [
+  { c: [[0,0]],                     col: PAL.y, w: 3.2 },
+  { c: [[0,0],[1,0]],               col: PAL.p, w: 2.8 },
+  { c: [[0,0],[0,1]],               col: PAL.p, w: 2.8 },
+  { c: [[0,0],[1,0],[2,0]],         col: PAL.o, w: 2.0 },
+  { c: [[0,0],[0,1],[0,2]],         col: PAL.o, w: 2.0 },
+  { c: [[0,0],[1,0],[0,1],[1,1]],   col: PAL.g, w: 2.2 },
+  { c: [[0,0],[1,0],[0,1]],         col: PAL.b, w: 0.7 },
+  { c: [[0,0],[1,0],[1,1]],         col: PAL.b, w: 0.7 },
+  { c: [[0,0],[0,1],[1,1]],         col: PAL.b, w: 0.7 },
+  { c: [[1,0],[0,1],[1,1]],         col: PAL.b, w: 0.7 },
+  { c: [[0,0],[1,0],[2,0],[3,0]],   col: PAL.v, w: 0.8 },
+  { c: [[0,0],[0,1],[0,2],[0,3]],   col: PAL.v, w: 0.8 },
+  { c: [[0,0],[1,0],[0,1],[1,1],[0,2],[1,2]], col: PAL.t, w: 0.35 },
+  { c: [[0,0],[1,0],[2,0],[0,1],[1,1],[2,1]], col: PAL.t, w: 0.35 },
+];
+SHAPES.forEach(s => {
+  s.pw = Math.max(...s.c.map(p => p[0])) + 1;
+  s.ph = Math.max(...s.c.map(p => p[1])) + 1;
+});
+const CHEERS = ["Great job! 🌟", "Amazing! ✨", "Super! 🎈", "Wow! 🌈", "Fantastic! 🦄", "Yay! 🎉"];
+
+/* ===================== game ===================== */
+const GRID = 8;
+const Game = {
+  cv: null, ctx: null, active: false,
+  board: [], tray: [null, null, null], drag: null,
+  score: 0, linesCleared: 0, coinsEarned: 0, over: false,
+  parts: [], floats: [], t: 0,
+
+  boot() {
+    this.cv = document.getElementById("cv");
+    this.ctx = this.cv.getContext("2d");
+    window.addEventListener("resize", () => this.resize());
+    this.resize();
+    const pos = (e) => {
+      const r = this.cv.getBoundingClientRect();
+      return { x: e.clientX - r.left, y: e.clientY - r.top };
+    };
+    this.cv.addEventListener("pointerdown", (e) => {
+      e.preventDefault();
+      this.cv.setPointerCapture(e.pointerId);
+      const p = pos(e); this.onDown(p.x, p.y);
+    });
+    this.cv.addEventListener("pointermove", (e) => {
+      const p = pos(e); this.onMove(p.x, p.y);
+    });
+    this.cv.addEventListener("pointerup", () => this.onUp());
+    this.cv.addEventListener("pointercancel", () => this.onUp());
+    requestAnimationFrame((ts) => this.frame(ts));
+  },
+
+  resize() {
+    const stage = document.getElementById("stage");
+    if (!stage) return;
+    const box = stage.getBoundingClientRect();
+    this.W = Math.max(1, box.width); this.H = Math.max(1, box.height);
+    const dpr = window.devicePixelRatio || 1;
+    this.cv.width = this.W * dpr; this.cv.height = this.H * dpr;
+    this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    // grid on top, tray (~2.4 cells) below
+    this.cell = Math.min((this.W - 20) / GRID, (this.H - 24) / (GRID + 3.0));
+    this.X0 = (this.W - this.cell * GRID) / 2;
+    this.Y0 = Math.max(8, (this.H - this.cell * (GRID + 3.0)) / 2);
+    this.trayY = this.Y0 + this.cell * (GRID + 0.55);
+  },
+
+  newGame() {
+    this.board = Array.from({ length: GRID }, () => Array(GRID).fill(null));
+    this.score = 0; this.linesCleared = 0; this.coinsEarned = 0;
+    this.over = false; this.drag = null;
+    this.parts = []; this.floats = [];
+    this.deal();
+    this.updateHud();
+  },
+
+  /* ---------- piece logic ---------- */
+  fits(s, gx, gy) {
+    return s.c.every(([dx, dy]) => {
+      const x = gx + dx, y = gy + dy;
+      return x >= 0 && x < GRID && y >= 0 && y < GRID && !this.board[y][x];
+    });
+  },
+  fitsSomewhere(s) {
+    for (let y = 0; y <= GRID - s.ph; y++)
+      for (let x = 0; x <= GRID - s.pw; x++)
+        if (this.fits(s, x, y)) return true;
+    return false;
+  },
+  sampleShape() {
+    const total = SHAPES.reduce((t, s) => t + s.w, 0);
+    let r = Math.random() * total;
+    for (const s of SHAPES) { r -= s.w; if (r <= 0) return s; }
+    return SHAPES[0];
+  },
+  // Deal 3 pieces; be kind — make sure at least one can actually be placed.
+  deal() {
+    this.tray = [this.sampleShape(), this.sampleShape(), this.sampleShape()];
+    if (!this.tray.some(s => this.fitsSomewhere(s))) {
+      const fitting = SHAPES.filter(s => this.fitsSomewhere(s));
+      if (fitting.length) this.tray[0] = GK.util.pick(fitting);
+    }
+  },
+
+  /* ---------- input ---------- */
+  slotRect(i) {
+    const w = (this.cell * GRID) / 3;
+    return { x: this.X0 + i * w, y: this.trayY, w, h: this.cell * 2.45 };
+  },
+  onDown(x, y) {
+    if (!this.active || this.over || this.drag) return;
+    for (let i = 0; i < 3; i++) {
+      const s = this.tray[i]; if (!s) continue;
+      const r = this.slotRect(i);
+      if (x >= r.x && x < r.x + r.w && y >= r.y - 10 && y < r.y + r.h + 16) {
+        this.drag = { i, s, x, y };
+        GK.Sfx.pickup();
+        return;
+      }
+    }
+  },
+  onMove(x, y) {
+    if (this.drag) { this.drag.x = x; this.drag.y = y; }
+  },
+  // Where would the dragged piece land? Piece floats above the finger so
+  // little hands can see it.
+  dragOrigin() {
+    const d = this.drag, c = this.cell;
+    return { x: d.x - (d.s.pw * c) / 2, y: d.y - d.s.ph * c - c * 0.9 };
+  },
+  dragTarget() {
+    const o = this.dragOrigin();
+    const gx = Math.round((o.x - this.X0) / this.cell);
+    const gy = Math.round((o.y - this.Y0) / this.cell);
+    return this.fits(this.drag.s, gx, gy) ? { gx, gy } : null;
+  },
+  onUp() {
+    const d = this.drag; if (!d) return;
+    this.drag = null;
+    const t = this.dragTargetFor(d);
+    if (!t) { GK.Sfx.nope(); return; } // piece hops back to the tray, no fuss
+    this.place(d.s, t.gx, t.gy);
+    this.tray[d.i] = null;
+    if (this.tray.every(s => !s)) this.deal();
+    this.updateHud();
+    if (!this.tray.some(s => s && this.fitsSomewhere(s))) {
+      this.over = true;
+      setTimeout(() => App.finish(), 800);
+    }
+  },
+  dragTargetFor(d) {
+    const saved = this.drag; this.drag = d;
+    const t = this.dragTarget(); this.drag = saved;
+    return t;
+  },
+
+  /* ---------- placing + clearing ---------- */
+  place(s, gx, gy) {
+    s.c.forEach(([dx, dy]) => { this.board[gy + dy][gx + dx] = s.col; });
+    this.score += s.c.length;
+    GK.Sfx.place();
+    // full rows / columns
+    const rows = [], cols = [];
+    for (let y = 0; y < GRID; y++) if (this.board[y].every(v => v)) rows.push(y);
+    for (let x = 0; x < GRID; x++) {
+      let full = true;
+      for (let y = 0; y < GRID; y++) if (!this.board[y][x]) { full = false; break; }
+      if (full) cols.push(x);
+    }
+    const n = rows.length + cols.length;
+    if (!n) return;
+    rows.forEach(y => { for (let x = 0; x < GRID; x++) this.burst(x, y); });
+    cols.forEach(x => { for (let y = 0; y < GRID; y++) this.burst(x, y); });
+    rows.forEach(y => { for (let x = 0; x < GRID; x++) this.board[y][x] = null; });
+    cols.forEach(x => { for (let y = 0; y < GRID; y++) this.board[y][x] = null; });
+    const pts = n * 10 + (n > 1 ? (n - 1) * 15 : 0);
+    this.score += pts;
+    this.linesCleared += n;
+    this.coinsEarned += n;
+    this.addFloat(this.X0 + (GRID / 2) * this.cell, this.Y0 + (GRID / 2) * this.cell, "+" + pts);
+    GK.Sfx.line(n);
+    GK.UI.toast(GK.util.pick(CHEERS));
+    // emptied the whole board — big bonus!
+    if (this.board.every(row => row.every(v => !v))) {
+      this.score += 50;
+      this.addFloat(this.W / 2, this.Y0 + this.cell * 2, "SUPER CLEAR! +50");
+      GK.Sfx.superclear();
+      this.confettiShower();
+    }
+  },
+  updateHud() {
+    document.getElementById("hud-score").textContent = this.score;
+    const best = App.progress ? Math.max(App.progress.best, this.score) : this.score;
+    document.getElementById("hud-best").textContent = "best " + best;
+  },
+
+  /* ---------- juice ---------- */
+  burst(gx, gy) {
+    const col = this.board[gy][gx] || "#fff";
+    const cx = this.X0 + (gx + 0.5) * this.cell, cy = this.Y0 + (gy + 0.5) * this.cell;
+    for (let k = 0; k < 5; k++) {
+      this.parts.push({
+        x: cx, y: cy,
+        vx: GK.util.rand(-140, 140), vy: GK.util.rand(-240, -40),
+        col, life: 1, size: GK.util.rand(4, 9), spin: GK.util.rand(-6, 6), a: Math.random() * 6,
+      });
+    }
+  },
+  confettiShower() {
+    const cols = Object.values(PAL);
+    for (let k = 0; k < 90; k++) {
+      this.parts.push({
+        x: GK.util.rand(0, this.W), y: GK.util.rand(-60, 0),
+        vx: GK.util.rand(-40, 40), vy: GK.util.rand(60, 220),
+        col: GK.util.pick(cols), life: GK.util.rand(1.2, 2.2),
+        size: GK.util.rand(5, 10), spin: GK.util.rand(-8, 8), a: Math.random() * 6,
+      });
+    }
+  },
+  addFloat(x, y, txt) { this.floats.push({ x, y, txt, life: 1.4 }); },
+
+  /* ---------- render ---------- */
+  frame(ts) {
+    const dt = Math.min(0.05, (ts - (this._pt || ts)) / 1000);
+    this._pt = ts; this.t += dt;
+    if (this.active) { this.update(dt); this.render(); }
+    requestAnimationFrame(t2 => this.frame(t2));
+  },
+  update(dt) {
+    this.parts = this.parts.filter(p => {
+      p.life -= dt; p.x += p.vx * dt; p.y += p.vy * dt;
+      p.vy += 420 * dt; p.a += p.spin * dt;
+      return p.life > 0 && p.y < this.H + 30;
+    });
+    this.floats = this.floats.filter(f => { f.life -= dt; f.y -= 34 * dt; return f.life > 0; });
+  },
+  block(x, y, size, col, alpha = 1) {
+    const ctx = this.ctx, r = size * 0.22, g = size * 0.05;
+    ctx.globalAlpha = alpha;
+    ctx.fillStyle = GK.util.shade(col, -55);
+    this.rr(x + g, y + g, size - g * 2, size - g * 2, r); ctx.fill();
+    ctx.fillStyle = col;
+    this.rr(x + g, y + g, size - g * 2, size - g * 2 - size * 0.08, r); ctx.fill();
+    ctx.fillStyle = GK.util.shade(col, 55);
+    this.rr(x + size * 0.16, y + size * 0.12, size * 0.68, size * 0.16, size * 0.08); ctx.fill();
+    ctx.globalAlpha = 1;
+  },
+  rr(x, y, w, h, r) {
+    const ctx = this.ctx;
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.arcTo(x + w, y, x + w, y + h, r);
+    ctx.arcTo(x + w, y + h, x, y + h, r);
+    ctx.arcTo(x, y + h, x, y, r);
+    ctx.arcTo(x, y, x + w, y, r);
+    ctx.closePath();
+  },
+  render() {
+    const ctx = this.ctx, c = this.cell;
+    ctx.clearRect(0, 0, this.W, this.H);
+
+    // board backdrop
+    ctx.fillStyle = "rgba(0,0,0,.25)";
+    this.rr(this.X0 - 8, this.Y0 - 8, GRID * c + 16, GRID * c + 16, 18); ctx.fill();
+
+    // which cells would light up if the drag dropped here?
+    const target = this.drag ? this.dragTarget() : null;
+    let hotRows = [], hotCols = [];
+    if (target) {
+      const ghost = new Set(this.drag.s.c.map(([dx, dy]) => (target.gy + dy) * GRID + target.gx + dx));
+      for (let y = 0; y < GRID; y++)
+        if (this.board[y].every((v, x) => v || ghost.has(y * GRID + x))) hotRows.push(y);
+      for (let x = 0; x < GRID; x++) {
+        let full = true;
+        for (let y = 0; y < GRID; y++) if (!this.board[y][x] && !ghost.has(y * GRID + x)) { full = false; break; }
+        if (full) hotCols.push(x);
+      }
+    }
+
+    // cells
+    for (let y = 0; y < GRID; y++) for (let x = 0; x < GRID; x++) {
+      const px = this.X0 + x * c, py = this.Y0 + y * c;
+      const hot = hotRows.includes(y) || hotCols.includes(x);
+      ctx.fillStyle = hot ? "rgba(255,255,255,.4)" : ((x + y) % 2 ? "rgba(255,255,255,.07)" : "rgba(255,255,255,.12)");
+      this.rr(px + 1.5, py + 1.5, c - 3, c - 3, c * 0.16); ctx.fill();
+      if (this.board[y][x]) this.block(px, py, c, this.board[y][x]);
+    }
+
+    // ghost piece on the grid
+    if (target) {
+      this.drag.s.c.forEach(([dx, dy]) => {
+        this.block(this.X0 + (target.gx + dx) * c, this.Y0 + (target.gy + dy) * c, c, this.drag.s.col, 0.45);
+      });
+    }
+
+    // tray
+    for (let i = 0; i < 3; i++) {
+      const s = this.tray[i];
+      if (!s || (this.drag && this.drag.i === i)) continue;
+      const r = this.slotRect(i), sc = 0.52;
+      const bob = Math.sin(this.t * 2.2 + i * 1.3) * 2.5;
+      const ox = r.x + (r.w - s.pw * c * sc) / 2;
+      const oy = r.y + (r.h - s.ph * c * sc) / 2 + bob;
+      const dim = this.fitsSomewhere(s) ? 1 : 0.35;
+      s.c.forEach(([dx, dy]) => this.block(ox + dx * c * sc, oy + dy * c * sc, c * sc, s.col, dim));
+    }
+
+    // dragged piece (floats above the finger)
+    if (this.drag) {
+      const o = this.dragOrigin();
+      this.drag.s.c.forEach(([dx, dy]) => this.block(o.x + dx * c, o.y + dy * c, c, this.drag.s.col));
+    }
+
+    // particles
+    for (const p of this.parts) {
+      ctx.save();
+      ctx.translate(p.x, p.y); ctx.rotate(p.a);
+      ctx.globalAlpha = Math.min(1, p.life);
+      ctx.fillStyle = p.col;
+      ctx.fillRect(-p.size / 2, -p.size / 2, p.size, p.size);
+      ctx.restore();
+    }
+    ctx.globalAlpha = 1;
+
+    // floating score text
+    for (const f of this.floats) {
+      ctx.globalAlpha = Math.min(1, f.life);
+      ctx.font = "900 " + Math.round(c * 0.7) + "px system-ui, sans-serif";
+      ctx.textAlign = "center";
+      ctx.fillStyle = "#fff";
+      ctx.strokeStyle = "rgba(0,0,0,.4)"; ctx.lineWidth = 4;
+      ctx.strokeText(f.txt, f.x, f.y);
+      ctx.fillText(f.txt, f.x, f.y);
+    }
+    ctx.globalAlpha = 1;
+  },
+};
+
+/* ===================== app shell ===================== */
+const App = {
+  profile: null, progress: null,
+
+  play() {
+    GK.Sfx.init(); GK.Sfx.click();
+    GK.Profiles.renderList();
+    GK.UI.showScreen("profiles");
+  },
+
+  start(profile) {
+    this.profile = profile;
+    this.progress = Storage.getProgress(profile.id);
+    Game.newGame();
+    GK.UI.showScreen("game");
+    Game.resize();
+    GK.UI.toast(`Let's play, ${profile.name}! 💛`);
+  },
+
+  playAgain() {
+    GK.Sfx.click();
+    GK.UI.closeModal("modal-over");
+    Game.newGame();
+  },
+
+  goHome(fromModal) {
+    GK.Sfx.click();
+    if (fromModal) GK.UI.closeModal("modal-over");
+    GK.UI.showScreen("splash");
+  },
+
+  // The board is full — celebrate, never commiserate.
+  finish() {
+    const g = Game, p = this.progress;
+    const newBest = g.score > (p.best || 0);
+    if (newBest) p.best = g.score;
+    p.coins = (p.coins || 0) + g.coinsEarned;
+    p.lines = (p.lines || 0) + g.linesCleared;
+    p.games = (p.games || 0) + 1;
+    Storage.saveProgress(this.profile.id, p);
+    document.getElementById("over-emoji").textContent = newBest ? "🏆" : GK.util.pick(["🎉", "🌟", "🎈", "🌈"]);
+    document.getElementById("over-title").textContent = newBest ? "NEW BEST!" : GK.util.pick(["Wonderful!", "Great game!", "So good!"]);
+    document.getElementById("over-score").textContent = g.score;
+    document.getElementById("over-msg").textContent =
+      `${g.linesCleared} line${g.linesCleared === 1 ? "" : "s"} · 🪙 +${g.coinsEarned}` +
+      (newBest ? "" : ` · best ${p.best}`);
+    if (newBest) { GK.Sfx.win(); Game.confettiShower(); }
+    else GK.Sfx.coin();
+    GK.UI.openModal("modal-over");
+  },
+
+  showLeaderboard() {
+    GK.Sfx.click();
+    GK.Profiles.renderLeaderboard("lb-rows", {
+      cols: r => `<span class="lb-stat">🏆 ${r.progress.best || 0}</span>
+                  <span class="lb-stat">🪙 ${r.progress.coins || 0}</span>`,
+      sort: (a, b) => (b.progress.best || 0) - (a.progress.best || 0),
+      meId: this.profile?.id,
+      empty: "No players yet — tap Play!",
+    });
+    GK.UI.showScreen("leaderboard");
+  },
+};
+
+/* ===================== wiring ===================== */
+GK.Profiles.init({
+  storage: Storage,
+  avatars: ["🦄", "🐰", "🐱", "🦊", "🐼", "🐸", "🐥", "🦖", "🐙", "🦉", "🐨", "🐷"],
+  meta: (p, g) => `🏆 best ${g.best || 0} · 🪙 ${g.coins || 0}`,
+  onEnter: (p) => App.start(p),
+  addLabel: "New Player",
+});
+
+GK.Sfx.enabled = Storage.getSettings().sound;
+GK.UI.bindSoundToggle(Storage);
+GK.initPWA({ appName: "Block Party" });
+Game.boot();
+document.getElementById("lb-back").onclick = () => GK.UI.showScreen("splash");
+
+function refreshSplash() {
+  const last = GK.Profiles.lastProfile();
+  const cont = document.getElementById("btn-continue-as");
+  const play = document.getElementById("btn-play");
+  if (last) {
+    cont.style.display = "";
+    cont.textContent = `▶ Continue as ${last.avatar} ${last.name}`;
+    cont.onclick = () => { GK.Sfx.init(); GK.Profiles.select(last); };
+    play.className = "btn blue wide"; play.textContent = "👥 Switch Player";
+  } else {
+    cont.style.display = "none";
+    play.className = "btn green wide"; play.textContent = "▶ Play";
+  }
+}
+refreshSplash();
+GK.UI.onScreenChange = (n) => {
+  Game.active = n === "game";
+  if (n === "splash") refreshSplash();
+  if (n === "game") Game.resize();
+};
+
+// Firestore sync runs in the background; the game is playable immediately.
+Storage.initFirebase().then(ok => {
+  const b = document.getElementById("sync-badge");
+  if (b) b.textContent = ok ? "☁️ family sync on" : "📴 offline — scores saved on this device";
+});
+
+window.App = App; window.Game = Game;
+</script>
+</body>
+</html>
