@@ -1,30 +1,34 @@
 # Block Party 🎉
 
-A gentle block-puzzle game for very young players. Drag the coloured pieces onto
-the board and fill a whole row or column to make it sparkle and clear. Built for
-Isabelle (age 4), modelled on the "Block Puzzle" app she loves.
+A block-puzzle game for the whole family. Drag the coloured pieces onto the
+board and fill a whole row or column to make it sparkle and clear — but the
+pieces are big and awkward, so mind how you fill the board or you'll run out of
+room. Modelled on the "Block Puzzle" app, tuned to challenge a capable player
+(and played by both daughters).
 
 **Play it:** https://rvenning.github.io/block-party/
 
 ## Features
 - 🧩 Classic block puzzle: drag pieces onto an 8×8 grid, clear full rows and columns
-- 💥 Combo bonuses when one placement clears several lines at once, plus a confetti **Super Clear** for emptying the whole board
+- 🧱 A meaty piece mix — pentominoes, the 3×3 square, long bars and awkward L/T/S shapes — that fills the board fast and makes you plan ahead
+- 🔥 **Combo streak:** clear a line on consecutive placements and each one is worth more (×1.5, ×2, ×2.5…)
+- 💥 Steeper multi-line bonuses, plus a confetti **Super Clear** for emptying the whole board
 - 🪙 Coins for every line cleared; ⭐ your best score is remembered
-- 🧸 **No timer and no "Game Over"** — a full board is a celebration ("Wonderful!" / "New Best!"), never a fail screen
-- 🤝 Kind by design for little hands: it always deals at least one piece that fits, invalid drops just hop back with a soft sound, the dragged piece floats above the finger, and lines that are about to clear light up before you commit
+- 🏁 Runs really end — if a crowded board can't take any of your three pieces, the game's over; the result screen still celebrates the score
 - 👨‍👩‍👧 Pick-a-name family profiles — no passwords; optional 4-digit PIN per profile with an admin override
 - 🦄 Your profile avatar is your player; kid-friendly avatar set
 - 🏆 Shared family leaderboard (best score)
 - 🔊 All sound effects synthesized with WebAudio (no asset downloads)
 - ☁️ Firebase Firestore sync (falls back to localStorage offline)
-- 📱 iPad-first: big touch targets, drag-and-drop tuned for small hands; works with a mouse on desktop
+- 📱 iPad-first: big touch targets, the dragged piece floats above the finger; works with a mouse on desktop
 - 📲 Installable PWA: "Add to Home Screen" button, offline play via service worker
 
 ## Scoring
 - **+1** per cell placed
-- **+10** per line cleared, with a **+15 × (lines − 1)** combo bonus for multi-line clears
+- **+10** per line cleared, plus a **+20 × (lines − 1)** bonus for clearing several at once
+- **Combo streak:** clearing a line on consecutive placements multiplies the clear points (×1, ×1.5, ×2, …); a placement that clears nothing resets it
 - **Coins** = lines cleared; a full-board Super Clear adds **+50**
-- Progress `{ best, coins, lines, games }` reconciles across devices by keeping the max of each field
+- Progress `{ best, coins, lines, games, sver }` reconciles across devices by keeping the max of each field within a **score season** (`sver`). Bumping the season retires the previous scores everywhere — because the sync merges by max, that's the only way a reset can't be resurrected by an old high score on another device.
 
 ## Built on gamekit
 Profiles, PINs, storage/sync, the sound engine, base UI styles and the PWA kit come from

@@ -124,6 +124,12 @@
 "use strict";
 
 /* ===================== storage ===================== */
+// Score season. Bump this to wipe every player's scores: because family sync
+// merges progress by MAX, a plain reset to 0 would just be resurrected by the
+// old high score on another device. Instead, a newer season wins a merge
+// outright (see mergeProgress), so raising SVER retires the previous season's
+// scores everywhere. SVER 2 = the harder difficulty (was an easy sandbox at 1).
+const SVER = 2;
 const Storage = GK.createStorage({
   prefix: "bp",
   collection: "blockparty",
@@ -135,13 +141,20 @@ const Storage = GK.createStorage({
     messagingSenderId: "569011992319",
     appId: "1:569011992319:web:bdcd6019d112006b5cbeca"
   },
-  blankProgress: () => ({ best: 0, coins: 0, lines: 0, games: 0, updated: 0 }),
-  mergeProgress: (a, b) => ({
-    best:  Math.max(a.best  || 0, b.best  || 0),
-    coins: Math.max(a.coins || 0, b.coins || 0),
-    lines: Math.max(a.lines || 0, b.lines || 0),
-    games: Math.max(a.games || 0, b.games || 0),
-  }),
+  blankProgress: () => ({ best: 0, coins: 0, lines: 0, games: 0, sver: SVER, updated: 0 }),
+  mergeProgress: (a, b) => {
+    // Different seasons: the newer one wins wholesale, so a reset can't be
+    // undone by an older device's higher score.
+    const sa = a.sver || 1, sb = b.sver || 1;
+    if (sa !== sb) return sb > sa ? { ...b } : { ...a };
+    return {
+      best:  Math.max(a.best  || 0, b.best  || 0),
+      coins: Math.max(a.coins || 0, b.coins || 0),
+      lines: Math.max(a.lines || 0, b.lines || 0),
+      games: Math.max(a.games || 0, b.games || 0),
+      sver:  sa,
+    };
+  },
 });
 
 /* ===================== sounds ===================== */
@@ -163,22 +176,41 @@ Object.assign(GK.Sfx, {
 /* ===================== pieces ===================== */
 const PAL = { y:"#ffd93b", p:"#ff5c8a", o:"#ffa03b", g:"#43c65a",
               b:"#3bb4ff", v:"#9b6bff", t:"#2ed9c3" };
-// Kid-tuned set: mostly small pieces, weighted so the tray is rarely scary.
+// Difficulty geared to a capable player: bigger, awkward pieces dominate and
+// the board fills fast. Small pieces are occasional relief, not the default.
 const SHAPES = [
-  { c: [[0,0]],                     col: PAL.y, w: 3.2 },
-  { c: [[0,0],[1,0]],               col: PAL.p, w: 2.8 },
-  { c: [[0,0],[0,1]],               col: PAL.p, w: 2.8 },
-  { c: [[0,0],[1,0],[2,0]],         col: PAL.o, w: 2.0 },
-  { c: [[0,0],[0,1],[0,2]],         col: PAL.o, w: 2.0 },
-  { c: [[0,0],[1,0],[0,1],[1,1]],   col: PAL.g, w: 2.2 },
-  { c: [[0,0],[1,0],[0,1]],         col: PAL.b, w: 0.7 },
-  { c: [[0,0],[1,0],[1,1]],         col: PAL.b, w: 0.7 },
-  { c: [[0,0],[0,1],[1,1]],         col: PAL.b, w: 0.7 },
-  { c: [[1,0],[0,1],[1,1]],         col: PAL.b, w: 0.7 },
-  { c: [[0,0],[1,0],[2,0],[3,0]],   col: PAL.v, w: 0.8 },
-  { c: [[0,0],[0,1],[0,2],[0,3]],   col: PAL.v, w: 0.8 },
-  { c: [[0,0],[1,0],[0,1],[1,1],[0,2],[1,2]], col: PAL.t, w: 0.35 },
-  { c: [[0,0],[1,0],[2,0],[0,1],[1,1],[2,1]], col: PAL.t, w: 0.35 },
+  // small relief pieces (rarer now)
+  { c: [[0,0]],                                       col: PAL.y, w: 0.5 },
+  { c: [[0,0],[1,0]],                                 col: PAL.p, w: 1.4 },
+  { c: [[0,0],[0,1]],                                 col: PAL.p, w: 1.4 },
+  { c: [[0,0],[1,0],[2,0]],                           col: PAL.o, w: 1.5 },
+  { c: [[0,0],[0,1],[0,2]],                           col: PAL.o, w: 1.5 },
+  // squares
+  { c: [[0,0],[1,0],[0,1],[1,1]],                     col: PAL.g, w: 1.8 },
+  { c: [[0,0],[1,0],[2,0],[0,1],[1,1],[2,1],[0,2],[1,2],[2,2]], col: PAL.g, w: 0.7 }, // 3x3
+  // L-trominoes (4 orientations)
+  { c: [[0,0],[1,0],[0,1]],                           col: PAL.b, w: 1.0 },
+  { c: [[0,0],[1,0],[1,1]],                           col: PAL.b, w: 1.0 },
+  { c: [[0,0],[0,1],[1,1]],                           col: PAL.b, w: 1.0 },
+  { c: [[1,0],[0,1],[1,1]],                           col: PAL.b, w: 1.0 },
+  // straight tetromino + pentomino
+  { c: [[0,0],[1,0],[2,0],[3,0]],                     col: PAL.v, w: 1.3 },
+  { c: [[0,0],[0,1],[0,2],[0,3]],                     col: PAL.v, w: 1.3 },
+  { c: [[0,0],[1,0],[2,0],[3,0],[4,0]],               col: PAL.v, w: 0.8 }, // 1x5
+  { c: [[0,0],[0,1],[0,2],[0,3],[0,4]],               col: PAL.v, w: 0.8 }, // 5x1
+  // L / J tetrominoes
+  { c: [[0,0],[0,1],[0,2],[1,2]],                     col: PAL.o, w: 1.0 },
+  { c: [[1,0],[1,1],[1,2],[0,2]],                     col: PAL.o, w: 1.0 },
+  // T tetromino
+  { c: [[0,0],[1,0],[2,0],[1,1]],                     col: PAL.t, w: 1.0 },
+  // S / Z tetrominoes
+  { c: [[1,0],[2,0],[0,1],[1,1]],                     col: PAL.t, w: 0.9 },
+  { c: [[0,0],[1,0],[1,1],[2,1]],                     col: PAL.t, w: 0.9 },
+  // rectangles
+  { c: [[0,0],[1,0],[0,1],[1,1],[0,2],[1,2]],         col: PAL.t, w: 1.0 }, // 2x3
+  { c: [[0,0],[1,0],[2,0],[0,1],[1,1],[2,1]],         col: PAL.t, w: 1.0 }, // 3x2
+  // big-L pentomino
+  { c: [[0,0],[0,1],[0,2],[1,2],[2,2]],               col: PAL.p, w: 0.7 },
 ];
 SHAPES.forEach(s => {
   s.pw = Math.max(...s.c.map(p => p[0])) + 1;
@@ -191,7 +223,7 @@ const GRID = 8;
 const Game = {
   cv: null, ctx: null, active: false,
   board: [], tray: [null, null, null], drag: null,
-  score: 0, linesCleared: 0, coinsEarned: 0, over: false,
+  score: 0, linesCleared: 0, coinsEarned: 0, streak: 0, over: false,
   parts: [], floats: [], t: 0,
 
   boot() {
@@ -276,7 +308,7 @@ const Game = {
 
   newGame() {
     this.board = Array.from({ length: GRID }, () => Array(GRID).fill(null));
-    this.score = 0; this.linesCleared = 0; this.coinsEarned = 0;
+    this.score = 0; this.linesCleared = 0; this.coinsEarned = 0; this.streak = 0;
     this.over = false; this.drag = null;
     this.parts = []; this.floats = [];
     this.deal();
@@ -302,13 +334,10 @@ const Game = {
     for (const s of SHAPES) { r -= s.w; if (r <= 0) return s; }
     return SHAPES[0];
   },
-  // Deal 3 pieces; be kind — make sure at least one can actually be placed.
+  // Deal 3 pieces honestly — no guaranteed fit. If a crowded board can't take
+  // any of them, the run ends (checked after each placement in onUp).
   deal() {
     this.tray = [this.sampleShape(), this.sampleShape(), this.sampleShape()];
-    if (!this.tray.some(s => this.fitsSomewhere(s))) {
-      const fitting = SHAPES.filter(s => this.fitsSomewhere(s));
-      if (fitting.length) this.tray[0] = GK.util.pick(fitting);
-    }
   },
 
   /* ---------- input ---------- */
@@ -377,18 +406,24 @@ const Game = {
       if (full) cols.push(x);
     }
     const n = rows.length + cols.length;
-    if (!n) return;
+    if (!n) { this.streak = 0; return; } // a placement that clears nothing breaks the combo
+    this.streak++;
     rows.forEach(y => { for (let x = 0; x < GRID; x++) this.burst(x, y); });
     cols.forEach(x => { for (let y = 0; y < GRID; y++) this.burst(x, y); });
     rows.forEach(y => { for (let x = 0; x < GRID; x++) this.board[y][x] = null; });
     cols.forEach(x => { for (let y = 0; y < GRID; y++) this.board[y][x] = null; });
-    const pts = n * 10 + (n > 1 ? (n - 1) * 15 : 0);
+    // Steeper multi-line bonus, then a combo multiplier for clearing on
+    // consecutive placements — rewards planning ahead.
+    const base = n * 10 + (n > 1 ? (n - 1) * 20 : 0);
+    const mult = 1 + (this.streak - 1) * 0.5;   // x1, x1.5, x2, x2.5, …
+    const pts = Math.round(base * mult);
     this.score += pts;
     this.linesCleared += n;
     this.coinsEarned += n;
-    this.addFloat(this.X0 + (GRID / 2) * this.cell, this.Y0 + (GRID / 2) * this.cell, "+" + pts);
+    const label = this.streak > 1 ? "+" + pts + "  x" + this.streak : "+" + pts;
+    this.addFloat(this.X0 + (GRID / 2) * this.cell, this.Y0 + (GRID / 2) * this.cell, label);
     GK.Sfx.line(n);
-    GK.UI.toast(GK.util.pick(CHEERS));
+    GK.UI.toast(this.streak > 1 ? `Combo x${this.streak}! 🔥` : GK.util.pick(CHEERS));
     // emptied the whole board — big bonus!
     if (this.board.every(row => row.every(v => !v))) {
       this.score += 50;
@@ -472,25 +507,14 @@ const Game = {
     ctx.fillStyle = "rgba(0,0,0,.25)";
     this.rr(this.X0 - 8, this.Y0 - 8, GRID * c + 16, GRID * c + 16, 18); ctx.fill();
 
-    // which cells would light up if the drag dropped here?
+    // where would the dragged piece land? (used only for the ghost — the game
+    // no longer highlights which line would clear; spotting that is the skill)
     const target = this.drag ? this.dragTarget() : null;
-    let hotRows = [], hotCols = [];
-    if (target) {
-      const ghost = new Set(this.drag.s.c.map(([dx, dy]) => (target.gy + dy) * GRID + target.gx + dx));
-      for (let y = 0; y < GRID; y++)
-        if (this.board[y].every((v, x) => v || ghost.has(y * GRID + x))) hotRows.push(y);
-      for (let x = 0; x < GRID; x++) {
-        let full = true;
-        for (let y = 0; y < GRID; y++) if (!this.board[y][x] && !ghost.has(y * GRID + x)) { full = false; break; }
-        if (full) hotCols.push(x);
-      }
-    }
 
     // cells
     for (let y = 0; y < GRID; y++) for (let x = 0; x < GRID; x++) {
       const px = this.X0 + x * c, py = this.Y0 + y * c;
-      const hot = hotRows.includes(y) || hotCols.includes(x);
-      ctx.fillStyle = hot ? "rgba(255,255,255,.4)" : ((x + y) % 2 ? "rgba(255,255,255,.07)" : "rgba(255,255,255,.12)");
+      ctx.fillStyle = (x + y) % 2 ? "rgba(255,255,255,.07)" : "rgba(255,255,255,.12)";
       this.rr(px + 1.5, py + 1.5, c - 3, c - 3, c * 0.16); ctx.fill();
       if (this.board[y][x]) this.block(px, py, c, this.board[y][x]);
     }
@@ -644,6 +668,16 @@ GK.UI.onScreenChange = (n) => {
   if (n === "splash") refreshSplash();
   if (n === "game") { Game.unzoom(); Game.resize(); setTimeout(() => Game.resize(), 350); }
 };
+
+// One-time score reset for the harder difficulty: zero out any progress saved
+// under an earlier season so everyone starts fresh. mergeProgress makes the new
+// season win, so the sync won't resurrect old scores from another device.
+for (const p of Storage.getProfiles()) {
+  const prog = Storage.getProgress(p.id);
+  if ((prog.sver || 1) < SVER) {
+    Storage.saveProgress(p.id, { best: 0, coins: 0, lines: 0, games: 0, sver: SVER, updated: Date.now() });
+  }
+}
 
 // Firestore sync runs in the background; the game is playable immediately.
 Storage.initFirebase().then(ok => {
