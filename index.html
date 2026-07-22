@@ -121,6 +121,7 @@
 <script src="lib/gk-storage.js"></script>
 <script src="lib/gk-profiles.js"></script>
 <script src="lib/gk-pwa.js"></script>
+<script src="lib/gk-fx.js"></script>
 
 <script>
 "use strict";
@@ -311,7 +312,7 @@ const Game = {
     this.board = Array.from({ length: GRID }, () => Array(GRID).fill(null));
     this.score = 0; this.linesCleared = 0; this.coinsEarned = 0; this.streak = 0;
     this.over = false; this.drag = null;
-    this.parts = []; this.floats = [];
+    this.parts = []; this.floats = []; GK.Fx.reset();
     this.deal();
     this.updateHud();
   },
@@ -451,17 +452,8 @@ const Game = {
       });
     }
   },
-  confettiShower() {
-    const cols = Object.values(PAL);
-    for (let k = 0; k < 90; k++) {
-      this.parts.push({
-        x: GK.util.rand(0, this.W), y: GK.util.rand(-60, 0),
-        vx: GK.util.rand(-40, 40), vy: GK.util.rand(60, 220),
-        col: GK.util.pick(cols), life: GK.util.rand(1.2, 2.2),
-        size: GK.util.rand(5, 10), spin: GK.util.rand(-8, 8), a: Math.random() * 6,
-      });
-    }
-  },
+  // Confetti comes from the kit now -- same shower, one shared implementation.
+  confettiShower() { GK.Fx.confetti(this.W, this.H, Object.values(PAL), 90); },
   addFloat(x, y, txt) { this.floats.push({ x, y, txt, life: 1.4 }); },
 
   /* ---------- render ---------- */
@@ -478,6 +470,7 @@ const Game = {
       return p.life > 0 && p.y < this.H + 30;
     });
     this.floats = this.floats.filter(f => { f.life -= dt; f.y -= 34 * dt; return f.life > 0; });
+    GK.Fx.update(dt);
   },
   block(x, y, size, col, alpha = 1) {
     const ctx = this.ctx, r = size * 0.22, g = size * 0.05;
@@ -555,6 +548,7 @@ const Game = {
       ctx.restore();
     }
     ctx.globalAlpha = 1;
+    GK.Fx.render(ctx);          // kit confetti, above the board and the blocks
 
     // floating score text
     for (const f of this.floats) {
