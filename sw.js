@@ -1,5 +1,5 @@
 // Block Party service worker — from gamekit sw-template.js.
-const CACHE = "blockparty-v11";
+const CACHE = "blockparty-v12";
 
 const SHELL = [
   "./",
